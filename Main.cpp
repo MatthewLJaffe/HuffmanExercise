@@ -3,12 +3,14 @@
 #include <fstream>
 #include <map>
 #include <sstream>
-#include<ctime>
+#include <ctime>
 #include <queue>
 #include <stack>
 
 std::map<char, int> frequencyTable;
 std::string bitsTable[256];
+size_t fileSize = 0;
+size_t decompressedSize = 0;
 //size of tree in bytes when written to compresseion file
 uint16_t treeSize = 0;
 
@@ -75,7 +77,8 @@ MinHeapNode* HuffmanCodes()
     std::priority_queue<MinHeapNode*, std::vector<MinHeapNode*>, compare> minHeap;
     for (auto& pair : frequencyTable)
         minHeap.push(new MinHeapNode(pair.first, pair.second, false));
-
+    if (minHeap.size() == 0)
+        return new MinHeapNode('x', 0, true);
     // Iterate while size of heap doesn't become 1
     while (minHeap.size() != 1) {
 
@@ -125,6 +128,7 @@ void readBinaryFile(std::string const& filename)
 		for (size_t i = 0; i < count; i++)
 		{
 			frequencyTable[static_cast<unsigned char>(buffer[i])]++;
+            fileSize++;
 		}
 	}
 	delete[] buffer;
@@ -193,6 +197,8 @@ void saveTree(MinHeapNode* root, std::ofstream& outputFile, std::string const& f
         outputFile.open(filename + "_COMPRESSED", std::ios::out | std::ios::binary);
         outputFile << treeSize;
         outputFile << '\n';
+        outputFile << fileSize;
+        outputFile << '\n';
     }
     saveTree(root->left, outputFile, filename);
     saveTree(root->right, outputFile, filename);
@@ -212,10 +218,10 @@ MinHeapNode* buildTreeFromCompressed(std::ifstream& input)
     //build tree
     std::stack<MinHeapNode*> treeStack;
     uint16_t inputTreeSize = 0;
-    //char treeSizeBuff[3];
-    //input.read(treeSizeBuff, 3);
     input >> inputTreeSize;
     char c = input.get();
+    input >> decompressedSize;
+    c = input.get();
     char* treeBuff = new char[inputTreeSize];
     input.read(treeBuff, static_cast<std::streamsize>(inputTreeSize));
     for (uint16_t treePos = 0; treePos < inputTreeSize; treePos++)
@@ -239,7 +245,9 @@ MinHeapNode* buildTreeFromCompressed(std::ifstream& input)
         }
         treeStack.push(new MinHeapNode(treeBuff[treePos], 0, false));
     }
-    delete treeBuff;
+    delete[] treeBuff;
+    if (treeStack.empty())
+        return nullptr;
     return treeStack.top();
 }
 
@@ -273,7 +281,7 @@ char getDecompressedByte(size_t& iPos, char* inputBuffer, size_t& inputBufferSiz
                 inputBufferSize = input.gcount();
                 inputEmpty = inputBufferSize == 0;
                 if (inputEmpty)
-                    return '\0';
+                    return currNode->data;
             }
         }
     }
@@ -282,10 +290,12 @@ char getDecompressedByte(size_t& iPos, char* inputBuffer, size_t& inputBufferSiz
 
 void createDecompressed(std::ifstream& input, std::string const& filename, MinHeapNode* root)
 {
+    size_t outputBytes = 0;
     size_t bufferSize = 8192;
     char* inputBuffer = new char[bufferSize];
     char* outputBuffer = new char[bufferSize];
     std::ofstream output(("DECOMPRESSED_" + filename).c_str(), std::ios::out | std::ios::binary);
+    if (root == nullptr) return;
     input.read(inputBuffer, bufferSize);
     size_t bytesRead = input.gcount();
     bool inputEmpty = false;
@@ -295,14 +305,21 @@ void createDecompressed(std::ifstream& input, std::string const& filename, MinHe
         size_t oPos = 0;
         for (; oPos < bufferSize; oPos++) 
         {
-            char outputByte = getDecompressedByte(iPos, inputBuffer, bytesRead, root, input, inputEmpty);
-            //no byte is left so decrement oPos for output write
             if (inputEmpty)
             {
-                oPos--;
+                std::cout << "No more input" << std::endl;
                 break;
             }
+            char outputByte = getDecompressedByte(iPos, inputBuffer, bytesRead, root, input, inputEmpty);
             outputBuffer[oPos] = outputByte;
+            outputBytes++;
+            if (outputBytes == decompressedSize)
+            {
+                std::cout << "Output bytes at decompressed size" << std::endl;
+                oPos++;
+                inputEmpty = true;
+                break;
+            }
         }
         output.write(outputBuffer, oPos);
     }
@@ -312,16 +329,20 @@ void createDecompressed(std::ifstream& input, std::string const& filename, MinHe
 int main(int argc, char* argv[])
 {
 	clock_t timeReq = clock();
-    std::string fileName = "Video.mp4";
+    std::string fileName = "FIEAPortfolio.zip";
 	readBinaryFile(fileName);
+    std::cout << "read file" << std::endl;
     MinHeapNode* compressTree = HuffmanCodes();
     std::ofstream outputFile;
     saveTree(compressTree, outputFile, fileName);
+    std::cout << "Tree saved" << std::endl;
     outputFile.flush();
     writeCompressedFile(fileName);
+    std::cout << "Compressed File Written" << std::endl;
     std::ifstream input((fileName + "_COMPRESSED").c_str(), std::ios::in | std::ios::binary);
     MinHeapNode* decompressTree = buildTreeFromCompressed(input);
     createDecompressed(input, fileName, decompressTree);
+    std::cout << "Decompressed File Written" << std::endl;
 	timeReq = clock() - timeReq;
 	std::cout << (float) timeReq / CLOCKS_PER_SEC << " seconds";
 	return 0;
