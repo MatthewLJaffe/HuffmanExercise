@@ -15,3 +15,8 @@ To decompress:
 ./HuffmanExercise decompress "FileToDecompress.COMPRESSED"
 the output of this comand will be a file "DECOMPRESSED_FileToDecompress" 
 that is identical to the file before compression
+
+To compile and run the source code open the HuffmanExercise.sln in Visual Studio 
+select release mode for faster speed
+hit alt + enter to bring up properties go to Configuration Properties > Debugging
+Enter the desired arguments for the program under in the Command Arguments row
